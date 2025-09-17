@@ -152,6 +152,7 @@ interface Emits {
   (e: 'add-spatial-annotation', timestamp: number, x: number, y: number, position?: Position): void
   (e: 'seek-to-time', timestamp: number): void
   (e: 'update-annotation-description', annotation: TimelineTag | SpatialAnnotation, description: string): void
+  (e: 'annotation-click', annotation: TimelineTag | SpatialAnnotation, target: HTMLElement): void
 }
 
 const props = defineProps<Props>()
@@ -324,7 +325,7 @@ const handleAnnotationLeave = (annotation: SpatialAnnotation) => {
 
 const handleAnnotationClick = (annotation: SpatialAnnotation, event: MouseEvent) => {
   clearHoverTimeout()
-  showAnnotationPopover(annotation, event.target as HTMLElement, true)
+  emit('annotation-click', annotation, event.target as HTMLElement)
 }
 
 const handleTimelineTagHover = (tag: TimelineTag, event: MouseEvent) => {
@@ -347,7 +348,7 @@ const handleTimelineTagLeave = (tag: TimelineTag) => {
 
 const handleTimelineTagClick = (tag: TimelineTag, event: MouseEvent) => {
   clearHoverTimeout()
-  showAnnotationPopover(tag, event.target as HTMLElement, true)
+  emit('annotation-click', tag, event.target as HTMLElement)
 }
 
 const showAnnotationPopover = (annotation: TimelineTag | SpatialAnnotation, target: HTMLElement, editable: boolean) => {
@@ -467,6 +468,11 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  /* Add data attribute for identification */
+}
+
+.video-annotation-pin[data-annotation-id] {
+  /* Styling for identifiable annotations */
 }
 
 .video-annotation-pin:hover {
@@ -492,6 +498,11 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   z-index: 11;
+  /* Add data attribute for identification */
+}
+
+.timeline-tag-marker[data-annotation-id] {
+  /* Styling for identifiable timeline tags */
 }
 
 .timeline-tag-marker:hover {

@@ -36,21 +36,162 @@ const handleEditPdfSpatialDescription = (annotation: SpatialAnnotation, position
         @live-annotations="handleLiveAnnotations"
       />
 
-      <!-- Video Player Section -->
-      <q-card v-if="recordedVideoUrl || videoSrc" class="video-section q-mb-md">
-        <q-card-section class="q-pa-none">
-          <VideoPlayer
-            ref="videoPlayerRef"
-            :video-src="recordedVideoUrl || videoSrc"
-            :timeline-tags="timelineTags"
-            :spatial-annotations="spatialAnnotations"
-            @add-timeline-tag="handleAddTimelineTag"
-            @add-spatial-annotation="handleAddSpatialAnnotation"
-            @seek-to-time="handleSeekToTime"
-            @update-annotation-description="handleUpdateAnnotationDescription"
-          />
+      <!-- Split Video Controls -->
+      <q-card v-if="recordedVideoUrl || videoSrc" class="split-controls q-mb-md">
+        <q-card-section>
+          <div class="row items-center q-gutter-md">
+            <q-toggle
+              v-model="splitVideoMode"
+              label="Split Video View"
+              color="primary"
+              @update:model-value="handleSplitModeChange"
+            />
+            
+            <div v-if="splitVideoMode" class="row items-center q-gutter-md">
+              <div class="col-auto">
+                <q-select
+                  v-model="leftVideoDate"
+                  :options="videoDateOptions"
+                  label="Left Video Date"
+                  outlined
+                  dense
+                  style="min-width: 150px"
+                />
+              </div>
+              <div class="col-auto">
+                <q-select
+                  v-model="rightVideoDate"
+                  :options="videoDateOptions"
+                  label="Right Video Date"
+                  outlined
+                  dense
+                  style="min-width: 150px"
+                />
+              </div>
+            </div>
+          </div>
         </q-card-section>
       </q-card>
+      <!-- Video Player Section -->
+      <div v-if="recordedVideoUrl || videoSrc" class="video-layout">
+        <!-- Single Video View -->
+        <q-card v-if="!splitVideoMode" class="video-section">
+          <q-card-section class="q-pa-none">
+            <VideoPlayer
+              ref="videoPlayerRef"
+              :video-src="recordedVideoUrl || videoSrc"
+              :timeline-tags="timelineTags"
+              :spatial-annotations="spatialAnnotations"
+              @add-timeline-tag="handleAddTimelineTag"
+              @add-spatial-annotation="handleAddSpatialAnnotation"
+              @seek-to-time="handleSeekToTime"
+              @update-annotation-description="handleUpdateAnnotationDescription"
+              @annotation-click="handleVideoAnnotationClick"
+            />
+          </q-card-section>
+        </q-card>
+        
+        <!-- Split Video View -->
+        <div v-else class="split-video-container">
+          <q-card class="video-section split-video-left">
+            <q-card-section class="q-pa-none">
+              <div class="video-header">
+                <span class="video-title">{{ leftVideoDate }}</span>
+              </div>
+              <VideoPlayer
+                ref="leftVideoPlayerRef"
+                :video-src="getVideoSrcForDate(leftVideoDate)"
+                :timeline-tags="getTimelineTagsForDate(leftVideoDate)"
+                :spatial-annotations="getSpatialAnnotationsForDate(leftVideoDate)"
+                @add-timeline-tag="(timestamp, wasPlaying) => handleAddTimelineTag(timestamp, wasPlaying, 'left')"
+                @add-spatial-annotation="(timestamp, x, y, position) => handleAddSpatialAnnotation(timestamp, x, y, position, 'left')"
+                @seek-to-time="handleSeekToTime"
+                @update-annotation-description="handleUpdateAnnotationDescription"
+                @annotation-click="handleVideoAnnotationClick"
+              />
+            </q-card-section>
+          </q-card>
+          
+          <q-card class="video-section split-video-right">
+            <q-card-section class="q-pa-none">
+              <div class="video-header">
+                <span class="video-title">{{ rightVideoDate }}</span>
+              </div>
+              <VideoPlayer
+                ref="rightVideoPlayerRef"
+                :video-src="getVideoSrcForDate(rightVideoDate)"
+                :timeline-tags="getTimelineTagsForDate(rightVideoDate)"
+                :spatial-annotations="getSpatialAnnotationsForDate(rightVideoDate)"
+                @add-timeline-tag="(timestamp, wasPlaying) => handleAddTimelineTag(timestamp, wasPlaying, 'right')"
+                @add-spatial-annotation="(timestamp, x, y, position) => handleAddSpatialAnnotation(timestamp, x, y, position, 'right')"
+                @seek-to-time="handleSeekToTime"
+                @update-annotation-description="handleUpdateAnnotationDescription"
+                @annotation-click="handleVideoAnnotationClick"
+              />
+            </q-card-section>
+          </q-card>
+        </div>
+        
+        <!-- Annotations Sidebar -->
+        <div class="annotations-sidebar">
+          <q-card class="full-height">
+            <q-card-section class="full-height">
+              <!-- Timeline Tags -->
+              <div class="annotations-section">
+                <div class="section-header">
+                  <q-icon name="bookmark" color="primary" class="q-mr-sm" />
+                  <span class="text-h6">Timeline Tags ({{ timelineTags.length }})</span>
+                </div>
+                
+                <div v-if="timelineTags.length === 0" class="text-grey-6 text-center q-py-md">
+                  No timeline tags added yet
+                </div>
+                
+                <q-scroll-area v-else class="tags-scroll-area">
+                  <q-list separator>
+                    <TimelineTagItem
+                      v-for="tag in sortedTimelineTags"
+                      :key="tag.id"
+                      :tag="tag"
+                      @seek="handleSeekToTime"
+                      @delete="handleDeleteTimelineTag"
+                      @edit-description="handleEditTagDescription"
+                      @click="handleTagClick"
+                    />
+                  </q-list>
+                </q-scroll-area>
+              </div>
+              
+              <!-- Spatial Annotations -->
+              <div class="annotations-section">
+                <div class="section-header">
+                  <q-icon name="place" color="negative" class="q-mr-sm" />
+                  <span class="text-h6">Spatial Annotations ({{ spatialAnnotations.length }})</span>
+                </div>
+                
+                <div v-if="spatialAnnotations.length === 0" class="text-grey-6 text-center q-py-md no-annotations">
+                  <q-icon name="touch_app" size="32px" class="q-mb-sm opacity-30" />
+                  <div>Click on video to add spatial annotations</div>
+                </div>
+                
+                <q-scroll-area v-else class="spatial-scroll-area">
+                  <q-list separator>
+                    <SpatialAnnotationItem
+                      v-for="annotation in sortedSpatialAnnotations"
+                      :key="annotation.id"
+                      :annotation="annotation"
+                      @seek="handleSeekToTime"
+                      @delete="handleDeleteSpatialAnnotation"
+                      @edit-description="handleEditSpatialDescription"
+                      @click="handleSpatialAnnotationClick"
+                    />
+                  </q-list>
+                </q-scroll-area>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+      </div>
     </div>
 
     <!-- Image Mode -->
@@ -137,93 +278,49 @@ const handleEditPdfSpatialDescription = (annotation: SpatialAnnotation, position
       </q-card>
     </div>
 
-    <!-- Annotations Layout -->
-    <div v-if="(annotationMode === 'video' && (recordedVideoUrl || videoSrc)) || (annotationMode === 'image' && selectedImageUrl) || (annotationMode === 'pdf' && selectedPdfUrl)" class="video-annotations-layout">
-      <!-- Timeline Tags (Only for Video Mode) -->
-      <div v-if="annotationMode === 'video'" class="timeline-section q-mb-md">
-        <q-card>
-          <q-card-section>
+    <!-- Non-Video Annotations Layout -->
+    <div v-if="(annotationMode === 'image' && selectedImageUrl) || (annotationMode === 'pdf' && selectedPdfUrl)" class="media-annotations-layout">
+      <!-- Spatial Annotations Sidebar -->
+      <div class="spatial-annotations-sidebar">
+        <q-card class="full-height">
+          <q-card-section class="full-height">
             <div class="text-h6 q-mb-md">
-              <q-icon name="bookmark" color="primary" class="q-mr-sm" />
-              Timeline Tags ({{ timelineTags.length }})
+              <q-icon name="place" color="negative" class="q-mr-sm" />
+              Spatial Annotations ({{ annotationMode === 'image' ? imageSpatialAnnotations.length : pdfSpatialAnnotations.length }})
             </div>
             
-            <div v-if="timelineTags.length === 0" class="text-grey-6 text-center q-py-lg">
-              No timeline tags added yet
+            <div v-if="(annotationMode === 'image' ? imageSpatialAnnotations.length : pdfSpatialAnnotations.length) === 0" class="text-grey-6 text-center q-py-lg no-annotations">
+              <q-icon name="touch_app" size="48px" class="q-mb-sm opacity-30" />
+              <div>Click on {{ annotationMode }} to add spatial annotations</div>
             </div>
             
-            <q-scroll-area v-else class="timeline-list">
+            <q-scroll-area v-else class="spatial-scroll-area">
               <q-list separator>
-                <TimelineTagItem
-                  v-for="tag in sortedTimelineTags"
-                  :key="tag.id"
-                  :tag="tag"
-                  @seek="handleSeekToTime"
-                  @delete="handleDeleteTimelineTag"
-                  @edit-description="handleEditTagDescription"
-                />
+                <!-- Image Annotations -->
+                <template v-if="annotationMode === 'image'">
+                  <ImageSpatialAnnotationItem
+                    v-for="annotation in sortedImageSpatialAnnotations"
+                    :key="annotation.id"
+                    :annotation="annotation"
+                    @delete="handleDeleteImageSpatialAnnotation"
+                    @edit-description="handleEditImageSpatialDescription"
+                  />
+                </template>
+                
+                <!-- PDF Annotations -->
+                <template v-if="annotationMode === 'pdf'">
+                  <PdfSpatialAnnotationItem
+                    v-for="annotation in sortedPdfSpatialAnnotations"
+                    :key="annotation.id"
+                    :annotation="annotation"
+                    @delete="handleDeletePdfSpatialAnnotation"
+                    @edit-description="handleEditPdfSpatialDescription"
+                  />
+                </template>
               </q-list>
             </q-scroll-area>
           </q-card-section>
         </q-card>
-      </div>
-
-      <!-- Media with Side Annotations -->
-      <div class="video-with-annotations">
-        <!-- Spatial Annotations Sidebar -->
-        <div class="spatial-annotations-sidebar">
-          <q-card class="full-height">
-            <q-card-section class="full-height">
-              <div class="text-h6 q-mb-md">
-                <q-icon name="place" color="negative" class="q-mr-sm" />
-                Spatial Annotations ({{ annotationMode === 'video' ? spatialAnnotations.length : (annotationMode === 'image' ? imageSpatialAnnotations.length : pdfSpatialAnnotations.length) }})
-              </div>
-              
-              <div v-if="(annotationMode === 'video' ? spatialAnnotations.length : (annotationMode === 'image' ? imageSpatialAnnotations.length : pdfSpatialAnnotations.length)) === 0" class="text-grey-6 text-center q-py-lg no-annotations">
-                <q-icon name="touch_app" size="48px" class="q-mb-sm opacity-30" />
-                <div>Click on {{ annotationMode }} to add spatial annotations</div>
-              </div>
-              
-              <q-scroll-area v-else class="spatial-scroll-area">
-                <q-list separator>
-                  <!-- Video Annotations -->
-                  <template v-if="annotationMode === 'video'">
-                    <SpatialAnnotationItem
-                      v-for="annotation in sortedSpatialAnnotations"
-                      :key="annotation.id"
-                      :annotation="annotation"
-                      @seek="handleSeekToTime"
-                      @delete="handleDeleteSpatialAnnotation"
-                      @edit-description="handleEditSpatialDescription"
-                    />
-                  </template>
-                  
-                  <!-- Image Annotations -->
-                  <template v-if="annotationMode === 'image'">
-                    <ImageSpatialAnnotationItem
-                      v-for="annotation in sortedImageSpatialAnnotations"
-                      :key="annotation.id"
-                      :annotation="annotation"
-                      @delete="handleDeleteImageSpatialAnnotation"
-                      @edit-description="handleEditImageSpatialDescription"
-                    />
-                  </template>
-                  
-                  <!-- PDF Annotations -->
-                  <template v-if="annotationMode === 'pdf'">
-                    <PdfSpatialAnnotationItem
-                      v-for="annotation in sortedPdfSpatialAnnotations"
-                      :key="annotation.id"
-                      :annotation="annotation"
-                      @delete="handleDeletePdfSpatialAnnotation"
-                      @edit-description="handleEditPdfSpatialDescription"
-                    />
-                  </template>
-                </q-list>
-              </q-scroll-area>
-            </q-card-section>
-          </q-card>
-        </div>
       </div>
     </div>
 
@@ -245,14 +342,24 @@ const handleEditPdfSpatialDescription = (annotation: SpatialAnnotation, position
       @cancel="handleCancelAnnotation"
     />
 
-    <!-- Description Bubble -->
-    <DescriptionBubble
-      v-if="showDescriptionBubble"
-      :position="bubblePosition"
+    <!-- Google Docs Style Description Editor -->
+    <GoogleDocsDescriptionEditor
+      v-if="showDescriptionEditor"
       :annotation="selectedAnnotation"
-      :editable="bubbleEditable"
+      :position="editorPosition"
+      @save="handleSaveDescription"
+      @close="closeDescriptionEditor"
+    />
+
+    <!-- Anchored Popover for Video Annotations -->
+    <AnchoredPopover
+      v-if="showAnchoredPopover"
+      :target-element="popoverTarget"
+      :annotation="hoveredAnnotation"
+      :editable="popoverEditable"
       @save-description="handleSaveDescription"
-      @close="closeDescriptionBubble"
+      @close="closeAnchoredPopover"
+      @edit="enablePopoverEdit"
     />
 
     <!-- Debug Info -->
@@ -295,7 +402,8 @@ import ImageSpatialAnnotationItem from './ImageSpatialAnnotationItem.vue'
 import PdfSpatialAnnotationItem from './PdfSpatialAnnotationItem.vue'
 import SpeedDial from './SpeedDial.vue'
 import AnnotationModal from './AnnotationModal.vue'
-import DescriptionBubble from './DescriptionBubble.vue'
+import GoogleDocsDescriptionEditor from './GoogleDocsDescriptionEditor.vue'
+import AnchoredPopover from './AnchoredPopover.vue'
 import type { TimelineTag, SpatialAnnotation, AnnotationValue, Position } from './types/annotations'
 
 // Sample video URL - replace with your video
@@ -303,6 +411,8 @@ const videoSrc = 'https://videos.pexels.com/video-files/6755156/6755156-uhd_2560
 
 // Template refs
 const videoPlayerRef = ref()
+const leftVideoPlayerRef = ref()
+const rightVideoPlayerRef = ref()
 const imageViewerRef = ref()
 const pdfViewerRef = ref()
 
@@ -313,6 +423,46 @@ const spatialAnnotations = ref<SpatialAnnotation[]>([])
 const imageSpatialAnnotations = ref<SpatialAnnotation[]>([])
 const pdfSpatialAnnotations = ref<SpatialAnnotation[]>([])
 
+// Split video state
+const splitVideoMode = ref(false)
+const leftVideoDate = ref('2024-01-15')
+const rightVideoDate = ref('2024-01-16')
+const videoDateOptions = [
+  '2024-01-15',
+  '2024-01-16', 
+  '2024-01-17',
+  '2024-01-18',
+  '2024-01-19'
+]
+
+// Video data by date (mock data)
+const videoDataByDate = ref({
+  '2024-01-15': {
+    src: 'https://videos.pexels.com/video-files/6755156/6755156-uhd_2560_1440_25fps.mp4',
+    timelineTags: [],
+    spatialAnnotations: []
+  },
+  '2024-01-16': {
+    src: 'https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4',
+    timelineTags: [],
+    spatialAnnotations: []
+  },
+  '2024-01-17': {
+    src: 'https://videos.pexels.com/video-files/6755156/6755156-uhd_2560_1440_25fps.mp4',
+    timelineTags: [],
+    spatialAnnotations: []
+  },
+  '2024-01-18': {
+    src: 'https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4',
+    timelineTags: [],
+    spatialAnnotations: []
+  },
+  '2024-01-19': {
+    src: 'https://videos.pexels.com/video-files/6755156/6755156-uhd_2560_1440_25fps.mp4',
+    timelineTags: [],
+    spatialAnnotations: []
+  }
+})
 // Media state
 const recordedVideoUrl = ref<string>('')
 const selectedImageUrl = ref<string>('')
@@ -324,8 +474,9 @@ const showDebug = ref(false)
 // Modal and dialog state
 const showAnnotationModal = ref(false)
 const showSpeedDial = ref(false)
-const showDescriptionBubble = ref(false)
-const bubbleEditable = ref(false)
+const showDescriptionEditor = ref(false)
+const showAnchoredPopover = ref(false)
+const popoverEditable = ref(false)
 
 const pendingAnnotationType = ref<'timeline' | 'spatial'>('timeline')
 const pendingTimestamp = ref(0)
@@ -334,8 +485,12 @@ const pendingAnnotation = ref<{ x: number; y: number; mode: 'video' | 'image' } 
 
 // Position state
 const speedDialPosition = ref<Position>({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' })
-const bubblePosition = ref<Position>({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' })
+const editorPosition = ref<Position>({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' })
 const selectedAnnotation = ref<TimelineTag | SpatialAnnotation | null>(null)
+
+// Anchored popover state
+const popoverTarget = ref<HTMLElement | null>(null)
+const hoveredAnnotation = ref<TimelineTag | SpatialAnnotation | null>(null)
 
 // Computed properties
 const sortedTimelineTags = computed(() => {
@@ -354,6 +509,27 @@ const sortedPdfSpatialAnnotations = computed(() => {
   return [...pdfSpatialAnnotations.value].sort((a, b) => a.timestamp - b.timestamp)
 })
 
+// Split video methods
+const handleSplitModeChange = (enabled: boolean) => {
+  if (enabled) {
+    // Initialize split video data if needed
+    console.log('Split video mode enabled')
+  } else {
+    console.log('Split video mode disabled')
+  }
+}
+
+const getVideoSrcForDate = (date: string): string => {
+  return videoDataByDate.value[date]?.src || videoSrc
+}
+
+const getTimelineTagsForDate = (date: string): TimelineTag[] => {
+  return videoDataByDate.value[date]?.timelineTags || []
+}
+
+const getSpatialAnnotationsForDate = (date: string): SpatialAnnotation[] => {
+  return videoDataByDate.value[date]?.spatialAnnotations || []
+}
 // Video handlers
 const handleVideoRecorded = (videoUrl: string) => {
   recordedVideoUrl.value = videoUrl
@@ -428,14 +604,14 @@ const changeImage = () => {
 }
 
 // Annotation handlers
-const handleAddTimelineTag = (timestamp: number, wasPlaying: boolean) => {
+const handleAddTimelineTag = (timestamp: number, wasPlaying: boolean, videoSide?: 'left' | 'right') => {
   pendingAnnotationType.value = 'timeline'
   pendingTimestamp.value = timestamp
   pendingCoordinates.value = null
   showAnnotationModal.value = true
 }
 
-const handleAddSpatialAnnotation = (timestamp: number, x: number, y: number, position?: Position) => {
+const handleAddSpatialAnnotation = (timestamp: number, x: number, y: number, position?: Position, videoSide?: 'left' | 'right') => {
   pendingAnnotation.value = { x, y, mode: 'video' }
   if (position) {
     speedDialPosition.value = position
@@ -513,42 +689,76 @@ const closeSpeedDial = () => {
   pendingAnnotation.value = null
 }
 
-// Bubble handlers
+// Click handlers for annotations
+const handleTagClick = (tag: TimelineTag) => {
+  // Seek to the tag timestamp and show popover on video
+  handleSeekToTime(tag.timestamp)
+  // Show popover at video position
+  setTimeout(() => {
+    showAnnotationPopoverOnVideo(tag)
+  }, 100)
+}
+
+const handleSpatialAnnotationClick = (annotation: SpatialAnnotation) => {
+  // Seek to the annotation timestamp and show popover on video
+  handleSeekToTime(annotation.timestamp)
+  // Show popover at video position
+  setTimeout(() => {
+    showAnnotationPopoverOnVideo(annotation)
+  }, 100)
+}
+
+const handleVideoAnnotationClick = (annotation: TimelineTag | SpatialAnnotation, target: HTMLElement) => {
+  hoveredAnnotation.value = annotation
+  popoverTarget.value = target
+  popoverEditable.value = true
+  showAnchoredPopover.value = true
+}
+
+const showAnnotationPopoverOnVideo = (annotation: TimelineTag | SpatialAnnotation) => {
+  // Find the annotation element on the video and show popover
+  const videoContainer = document.querySelector('.video-player-container')
+  if (videoContainer) {
+    const annotationElement = videoContainer.querySelector(`[data-annotation-id="${annotation.id}"]`)
+    if (annotationElement) {
+      hoveredAnnotation.value = annotation
+      popoverTarget.value = annotationElement as HTMLElement
+      popoverEditable.value = false
+      showAnchoredPopover.value = true
+    }
+  }
+}
+
+// Editor handlers
 const handleAnnotationHover = (annotation: SpatialAnnotation, position: Position) => {
-  if (!showDescriptionBubble.value || selectedAnnotation.value?.id !== annotation.id) {
-    selectedAnnotation.value = annotation
-    bubblePosition.value = position
-    bubbleEditable.value = false
-    showDescriptionBubble.value = true
+  if (!showAnchoredPopover.value || hoveredAnnotation.value?.id !== annotation.id) {
+    hoveredAnnotation.value = annotation
+    popoverEditable.value = false
+    showAnchoredPopover.value = true
   }
 }
 
 const handleAnnotationClick = (annotation: SpatialAnnotation, position: Position) => {
   selectedAnnotation.value = annotation
-  bubblePosition.value = position
-  bubbleEditable.value = true
-  showDescriptionBubble.value = true
+  editorPosition.value = position
+  showDescriptionEditor.value = true
 }
 
 const handleEditTagDescription = (tag: TimelineTag, position: Position) => {
   selectedAnnotation.value = tag
-  bubblePosition.value = position
-  bubbleEditable.value = true
-  showDescriptionBubble.value = true
+  editorPosition.value = position
+  showDescriptionEditor.value = true
 }
 
 const handleEditSpatialDescription = (annotation: SpatialAnnotation, position: Position) => {
   selectedAnnotation.value = annotation
-  bubblePosition.value = position
-  bubbleEditable.value = true
-  showDescriptionBubble.value = true
+  editorPosition.value = position
+  showDescriptionEditor.value = true
 }
 
 const handleEditImageSpatialDescription = (annotation: SpatialAnnotation, position: Position) => {
-  selectedAnnotation.value = annotation
-  bubblePosition.value = position
-  bubbleEditable.value = true
-  showDescriptionBubble.value = true
+  editorPosition.value = position
+  showDescriptionEditor.value = true
 }
 
 const handleUpdateAnnotationDescription = (annotation: TimelineTag | SpatialAnnotation, description: string) => {
@@ -579,7 +789,8 @@ const handleSaveDescription = (description: string) => {
   if (!selectedAnnotation.value) return
   
   handleUpdateAnnotationDescription(selectedAnnotation.value, description)
-  closeDescriptionBubble()
+  closeDescriptionEditor()
+  closeAnchoredPopover()
 }
 
 // Navigation handlers
@@ -587,12 +798,28 @@ const handleSeekToTime = (timestamp: number) => {
   if (videoPlayerRef.value) {
     videoPlayerRef.value.seekToTime(timestamp)
   }
+  if (leftVideoPlayerRef.value) {
+    leftVideoPlayerRef.value.seekToTime(timestamp)
+  }
+  if (rightVideoPlayerRef.value) {
+    rightVideoPlayerRef.value.seekToTime(timestamp)
+  }
 }
 
-const closeDescriptionBubble = () => {
-  showDescriptionBubble.value = false
+const closeDescriptionEditor = () => {
+  showDescriptionEditor.value = false
   selectedAnnotation.value = null
-  bubbleEditable.value = false
+}
+
+const closeAnchoredPopover = () => {
+  showAnchoredPopover.value = false
+  hoveredAnnotation.value = null
+  popoverTarget.value = null
+  popoverEditable.value = false
+}
+
+const enablePopoverEdit = () => {
+  popoverEditable.value = true
 }
   const index = timelineTags.value.findIndex(tag => tag.id === tagId)
   if (index > -1) {
@@ -613,6 +840,13 @@ const handleDeleteTimelineTag = (tagId: string) => {
     imageSpatialAnnotations.value.splice(index, 1)
   }
 }
+
+const handleDeletePdfSpatialAnnotation = (annotationId: string) => {
+  const index = pdfSpatialAnnotations.value.findIndex(annotation => annotation.id === annotationId)
+  if (index > -1) {
+    pdfSpatialAnnotations.value.splice(index, 1)
+  }
+}
 </script>
 
 <style scoped>
@@ -628,26 +862,75 @@ const handleDeleteTimelineTag = (tagId: string) => {
   color: white;
 }
 
+
+
 .mode-toggle {
   width: 100%;
 }
 
+/* Split Video Controls */
+.split-controls {
+  background: rgba(0,0,0,0.05);
+}
+
 /* Layout */
-.video-annotations-layout {
+.video-layout {
   display: flex;
-  flex-direction: column;
   gap: 16px;
+  align-items: flex-start;
 }
 
-.timeline-section {
-  width: 100%;
+.video-section {
+  flex: 1;
+  min-width: 0;
 }
 
-.timeline-list {
+.split-video-container {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+}
+
+.split-video-left,
+.split-video-right {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-header {
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  font-weight: 500;
+}
+
+.annotations-sidebar {
+  width: 350px;
+  flex-shrink: 0;
+}
+
+.annotations-section {
+  margin-bottom: 24px;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.tags-scroll-area {
   max-height: 200px;
 }
 
-.video-with-annotations {
+.spatial-scroll-area {
+  max-height: 300px;
+}
+
+/* Non-Video Layout */
+.media-annotations-layout {
   display: flex;
   gap: 16px;
   align-items: flex-start;
@@ -658,18 +941,12 @@ const handleDeleteTimelineTag = (tagId: string) => {
   flex-shrink: 0;
 }
 
-.spatial-scroll-area {
-  height: calc(100vh - 400px);
-  min-height: 300px;
-  max-height: 600px;
-}
-
 .no-annotations {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px;
+  height: 150px;
   text-align: center;
 }
 
@@ -679,6 +956,15 @@ const handleDeleteTimelineTag = (tagId: string) => {
 
 /* Image Controls */
 .image-controls {
+  background: rgba(0,0,0,0.05);
+  border-top: 1px solid rgba(0,0,0,0.1);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* PDF Controls */
+.pdf-controls {
   background: rgba(0,0,0,0.05);
   border-top: 1px solid rgba(0,0,0,0.1);
   display: flex;
@@ -701,17 +987,32 @@ const handleDeleteTimelineTag = (tagId: string) => {
 
 /* Mobile Optimizations */
 @media (max-width: 1024px) {
-  .video-with-annotations {
+  .video-layout {
+    flex-direction: column;
+  }
+  
+  .annotations-sidebar {
+    width: 100%;
+  }
+  
+  .split-video-container {
+    flex-direction: column;
+  }
+  
+  .spatial-scroll-area {
+    max-height: 250px;
+  }
+  
+  .tags-scroll-area {
+    max-height: 150px;
+  }
+  
+  .media-annotations-layout {
     flex-direction: column;
   }
   
   .spatial-annotations-sidebar {
     width: 100%;
-  }
-  
-  .spatial-scroll-area {
-    height: 300px;
-    max-height: 400px;
   }
 }
 
@@ -720,25 +1021,32 @@ const handleDeleteTimelineTag = (tagId: string) => {
     padding: 8px;
   }
   
-  .video-annotations-layout {
+  .video-layout {
     gap: 12px;
   }
   
-  .video-with-annotations {
+  .split-video-container {
+    gap: 12px;
+  }
+  
+  .annotations-sidebar {
+    width: 100%;
+  }
+  
+  .spatial-scroll-area {
+    max-height: 200px;
+  }
+  
+  .tags-scroll-area {
+    max-height: 120px;
+  }
+  
+  .media-annotations-layout {
     gap: 12px;
   }
   
   .spatial-annotations-sidebar {
     width: 100%;
-  }
-  
-  .spatial-scroll-area {
-    height: 250px;
-    max-height: 300px;
-  }
-  
-  .timeline-list {
-    max-height: 150px;
   }
 }
 </style>
